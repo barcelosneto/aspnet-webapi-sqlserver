@@ -1,12 +1,36 @@
 using Microsoft.EntityFrameworkCore;
 using WorkOrders.Api.Data;
 using WorkOrders.Api.Services;
+using WorkOrders.Api.Health;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
+    .AddCheck<DatabaseConnectivityHealthCheck>("database", tags: ["ready"]);
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("demo", limiter =>
+    {
+        limiter.PermitLimit = 3;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Results.Problem(statusCode: 429, title: "Too many requests")
+            .ExecuteAsync(context.HttpContext);
+    };
+});
 builder.Services.AddScoped<WorkOrderService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -31,6 +55,7 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     await Results.Problem(statusCode: status, title: business?.Message ?? "Unexpected server error").ExecuteAsync(context);
 }));
 app.UseStatusCodePages();
+app.UseRateLimiter();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -38,6 +63,10 @@ if (app.Environment.IsDevelopment())
 }
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapGet("/examples/limited", () => Results.Ok(new { message = "Demonstration request accepted" }))
+    .RequireRateLimiting("demo");
 app.Run();
 public partial class Program;
 

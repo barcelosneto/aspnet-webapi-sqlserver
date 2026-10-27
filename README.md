@@ -8,6 +8,15 @@ C#, ASP.NET Core .NET 10 LTS, Entity Framework Core, SQLite, provider SQL Server
 
 ## Funcionalidades
 
+### Exemplos operacionais adicionados em 27/10/2026
+
+- `/health/live` verifica a resposta do processo e `/health/ready` verifica a conectividade do banco.
+- `/examples/limited` demonstra uma janela fixa compartilhada por instância: três chamadas por minuto, sem fila; excedentes recebem HTTP 429, Retry-After e Problem Details.
+- Testes verificam o contrato de erros de validação e a distinção entre processo vivo e banco indisponível.
+
+[Guia de execução e limites dos exemplos](samples/operational/). A suíte local completa passou em **12 testes**, usando SQLite; não houve teste de carga ou implantação em produção. A política de limite se aplica somente ao endpoint demonstrativo.
+
+
 CRUD de ordens com título, descrição, prioridade de 1 a 5, situação e prazo. DTOs limitam campos aceitos; datas devem ser informadas; situações permitidas são `open`, `in_progress` e `completed`. Erros de validação retornam 400, recursos ausentes 404, exclusão 204 e falhas inesperadas 500 com Problem Details.
 
 ## Instalação e execução

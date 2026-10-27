@@ -14,6 +14,7 @@ namespace WorkOrders.Api.Tests;
 
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
+    public bool DatabaseUnavailable { get; init; }
     private readonly SqliteConnection connection = new("Data Source=:memory:");
     public ApiFactory() => connection.Open();
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -23,7 +24,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>>();
-            services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
+            services.AddDbContext<AppDbContext>(options =>
+            {
+                if (DatabaseUnavailable)
+                    options.UseSqlite($"Data Source={Path.Combine(Path.GetTempPath(), Guid.NewGuid()+".sqlite")};Mode=ReadOnly");
+                else options.UseSqlite(connection);
+            });
         });
     }
     public HttpClient CreateInitializedClient()
